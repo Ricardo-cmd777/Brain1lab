@@ -1,0 +1,11 @@
+export const KIT_TAGS = {
+  CHIP1_EXCHANGE: 123456,
+  SV_PARS: 234567,
+  PARTNERS: 345678,
+  FAMILY_FRIENDS: 456789,
+  COACHES: 567890,
+  SCIENTISTS: 678901,
+  GENERAL: 789012,
+} as const;
+
+export type KitTagKey = keyof typeof KIT_TAGS;
