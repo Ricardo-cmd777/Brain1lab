@@ -3,6 +3,13 @@
 import { useMemo } from "react";
 import type { KitTagKey } from "@/lib/kit-tags";
 //import { useSubscribe } from "@/useSubscribe";
+function IconBlock() {
+  return <span className="block h-6 w-6 rounded-md bg-slate-300" />;
+}
+
+function Chevron() {
+  return <span className="ml-2 inline-block text-lg leading-none">›</span>;
+}
 
 /** -----------------------------
  * Types
@@ -30,7 +37,7 @@ export default function Home() {
       {
         title: "SCIENCE-BACKED GAMES",
         body: "Every drill is designed with neuroscience and elite coaching. Train focus, reaction, and decision timing for your sport.",
-        side: "left",
+        side: "left"
       },
       {
         title: "REAL-TIME PROGRESS\nTRACKING",
@@ -282,20 +289,9 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="mt-6">
-            <SubscribeForm
-              variant="cta"
-              //email={subscribe.email}
-              //onEmailChange={subscribe.setEmail}
-              //status={subscribe.status}
-              //message={subscribe.message}
-              //onSubmit={subscribe.submit}
-            />
-          </div>
+        
 
-          <div className="mt-3 text-center text-[11px] text-neutral-500">
-            Built with <span className="font-semibold text-neutral-700">Kix</span>
-          </div>
+          
         </div>
       </section>
 
