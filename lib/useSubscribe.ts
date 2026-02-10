@@ -5,30 +5,16 @@ import type { KitTagKey } from "@/lib/kit-tags";
 
 type Status = "idle" | "loading" | "success" | "error";
 
-type SubscribeResult = {
-  email: string;
-  setEmail: (v: string) => void;
-  status: Status;
-  message: string;
-  submit: (e?: React.FormEvent) => void;
-  placeholder: string;
-};
-
-export function useSubscribe(tag: KitTagKey): SubscribeResult {
+export function useSubscribe(tag: KitTagKey) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
 
   const placeholder = useMemo(() => {
-    switch (tag) {
-      case "SCIENTIFIC_COMMITTEE":
-        return "Work email (research / institution)";
-      case "COACH":
-        return "Team or work email";
-      default:
-        return "Email address";
-    }
-  }, [tag]);
+    if (status === "loading") return "Subscribing…";
+    if (status === "success") return "Done ✓";
+    return "Email Address";
+  }, [status]);
 
   const submit = useCallback(
     async (e?: React.FormEvent) => {
@@ -48,27 +34,19 @@ export function useSubscribe(tag: KitTagKey): SubscribeResult {
         const res = await fetch("/api/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: trimmed,
-            tag,
-          }),
+          body: JSON.stringify({ email: trimmed, tag }),
         });
 
         const data = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
-          error?: string;
           code?: string;
+          error?: string;
+          message?: string;
         };
 
         if (!res.ok || !data.ok) {
           setStatus("error");
-          setMessage(
-            data.code === "AUTH_FAILURE"
-              ? "Subscription service unavailable."
-              : data.code === "INVALID_FORMAT"
-              ? "Invalid email format."
-              : "Subscription failed. Please try again."
-          );
+          setMessage(data.error || data.message || "Subscription failed. Try again.");
           return;
         }
 
@@ -83,12 +61,5 @@ export function useSubscribe(tag: KitTagKey): SubscribeResult {
     [email, tag]
   );
 
-  return {
-    email,
-    setEmail,
-    status,
-    message,
-    submit,
-    placeholder,
-  };
+  return { email, setEmail, status, message, placeholder, submit };
 }
