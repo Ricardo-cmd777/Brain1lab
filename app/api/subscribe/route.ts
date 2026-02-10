@@ -1,67 +1,118 @@
 import { NextResponse } from "next/server";
 import { KIT_TAGS, type KitTagKey } from "@/lib/kit-tags";
 
-type SubscribePayload = {
+type Payload = {
   email?: string;
-  tag?: KitTagKey; // "COACHES" | "SV_PARS" | etc.
+  tag?: KitTagKey;
 };
 
-const KIT_BASE = "https://api.convertkit.com/v3";
+const isEmail = (v: string) => /^\S+@\S+\.\S+$/.test(v);
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
-    const body = (await request.json()) as SubscribePayload;
-    const email = (body?.email ?? "").toString().trim();
-    const tagKey = body?.tag;
-
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      return NextResponse.json({ error: "Invalid email" }, { status: 400 });
-    }
-
-    const apiKey = process.env.KIT_API_KEY;
+    const apiKey = process.env.KIT_V4_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: "Missing KIT_API_KEY" }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, code: "SERVER_CONFIG", error: "Missing KIT_V4_API_KEY" },
+        { status: 500 }
+      );
     }
 
-    // 1) Create/update subscriber
-    const subRes = await fetch(`${KIT_BASE}/subscribers`, {
+    const body = (await req.json().catch(() => ({}))) as Payload;
+    const email = body.email?.trim().toLowerCase();
+    const tagKey = body.tag ?? "GENERAL_USER";
+
+    // --- Validation ---
+    if (!email) {
+      return NextResponse.json(
+        { ok: false, code: "BAD_REQUEST", error: "Missing email" },
+        { status: 400 }
+      );
+    }
+
+    if (!isEmail(email)) {
+      return NextResponse.json(
+        { ok: false, code: "INVALID_FORMAT", error: "Invalid email format" },
+        { status: 400 }
+      );
+    }
+
+    const tagId = KIT_TAGS[tagKey];
+    if (!tagId) {
+      return NextResponse.json(
+        { ok: false, code: "UNKNOWN_TAG", error: `Unknown tag: ${tagKey}` },
+        { status: 400 }
+      );
+    }
+
+    // --- 1) Create / upsert subscriber ---
+    const createRes = await fetch("https://api.kit.com/v4/subscribers", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: apiKey, email }),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Kit-Api-Key": apiKey,
+      },
+      body: JSON.stringify({
+        email_address: email,
+        state: "active",
+      }),
     });
 
-    if (!subRes.ok) {
-      const detail = await subRes.text();
+    const createJson = await createRes.json().catch(() => ({}));
+
+    if (!createRes.ok) {
       return NextResponse.json(
-        { error: "Kit subscriber request failed", detail },
+        {
+          ok: false,
+          code: createRes.status === 401 ? "AUTH_FAILURE" : "PROVIDER_ERROR",
+          status: createRes.status,
+          error:
+            createJson?.message ??
+            createJson?.error ??
+            "Failed to create subscriber",
+        },
         { status: 502 }
       );
     }
 
-    // 2) Apply tag (optional)
-    if (tagKey) {
-      const tagId = KIT_TAGS[tagKey];
-      if (!tagId) {
-        return NextResponse.json({ error: "Unknown tag" }, { status: 400 });
-      }
-
-      const tagRes = await fetch(`${KIT_BASE}/tags/${tagId}/subscribe`, {
+    // --- 2) Tag subscriber by email (idempotent) ---
+    const tagRes = await fetch(
+      `https://api.kit.com/v4/tags/${tagId}/subscribers`,
+      {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey, email }),
-      });
-
-      if (!tagRes.ok) {
-        const detail = await tagRes.text();
-        return NextResponse.json(
-          { error: "Kit tag assignment failed", detail },
-          { status: 502 }
-        );
+        headers: {
+          "Content-Type": "application/json",
+          "X-Kit-Api-Key": apiKey,
+        },
+        body: JSON.stringify({
+          email_address: email,
+        }),
       }
+    );
+
+    const tagJson = await tagRes.json().catch(() => ({}));
+
+    if (!tagRes.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: tagRes.status === 401 ? "AUTH_FAILURE" : "PROVIDER_ERROR",
+          status: tagRes.status,
+          error:
+            tagJson?.message ??
+            tagJson?.error ??
+            "Failed to tag subscriber",
+        },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  } catch (err) {
+    console.error("subscribe route crashed:", err);
+    return NextResponse.json(
+      { ok: false, code: "SERVER_ERROR", error: "Route crashed" },
+      { status: 502 }
+    );
   }
 }
